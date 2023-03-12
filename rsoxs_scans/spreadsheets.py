@@ -13,7 +13,7 @@ import json
 import re, warnings, httpx, uuid
 import numpy as np
 import pandas as pd
-from .defaults import rsoxs_configurations,empty_sample,empty_acq,edge_names,config_list, current_version
+from .defaults import rsoxs_configurations, empty_sample, empty_acq, edge_names, config_list, current_version
 
 
 def load_samplesxlsx(filename: str):
@@ -38,17 +38,17 @@ def load_samplesxlsx(filename: str):
     except ValueError:
         skiprows = []
         pass
-    
-    #load the version number
+
+    # load the version number
     excel_file = load_workbook(filename)
-    print(f'spreadsheet version is {excel_file.properties.title}')
+    print(f"spreadsheet version is {excel_file.properties.title}")
     if excel_file.properties.title != current_version:
         excel_file.close()
-        raise ValueError('this excel file is not the current version.  please upgrade your template and try again')
+        raise ValueError("this excel file is not the current version.  please upgrade your template and try again")
     excel_file.close()
-    
+
     # Load Bar sheet
-    warnings.simplefilter(action='ignore', category=UserWarning)
+    warnings.simplefilter(action="ignore", category=UserWarning)
     df = pd.read_excel(
         filename,
         na_values="",
@@ -85,7 +85,7 @@ def load_samplesxlsx(filename: str):
     acqs = acqsdf.to_dict(orient="records")
     if not isinstance(acqs, list):  # is there only one acquistion?
         acqs = [acqs]
-    for i,acq in enumerate(acqs):
+    for i, acq in enumerate(acqs):
         for key in acq:
             if isinstance(acq[key], str):
                 acq[key] = acq[key].replace("(", "[").replace(")", "]").replace("'", '"')
@@ -102,6 +102,7 @@ def load_samplesxlsx(filename: str):
                     except:
                         pass
         if np.isnan(acq["priority"]):
+            # Todo add warning here
             break  # force priority in every row, if missing, stop
         samp = next(
             dict for dict in new_bar if dict["sample_id"] == acq["sample_id"]
@@ -116,17 +117,21 @@ def load_samplesxlsx(filename: str):
                 acq["edge"] = [
                     float(num) for num in acq["edge"].split(",")
                 ]  # cast it as a list of floating point numbers instead
-        if acq['type'].lower() == 'rsoxs':
-            if acq['configuration'] not in rsoxs_configurations:
-                raise TypeError(f'{acq["configuration"]} on line {i} is not a valid configuration for an rsoxs scan')
-            if not isinstance(acq.get('edge','c'),(tuple,list, int, float)):
-                if not str(acq.get('edge','c')).lower() in edge_names:
+        if acq["type"].lower() == "rsoxs":
+            if acq["configuration"] not in rsoxs_configurations:
+                raise TypeError(
+                    f'{acq["configuration"]} on line {i} is not a valid configuration for an rsoxs scan'
+                )
+            if not isinstance(acq.get("edge", "c"), (tuple, list, int, float)):
+                if not str(acq.get("edge", "c")).lower() in edge_names:
                     raise ValueError(f'{acq["edge"]} on line {i} is not a valid edge for an rsoxs scan')
-        elif acq['type'].lower() == 'nexafs':
-            if acq['configuration'] not in config_list:
-                raise TypeError(f'{acq["configuration"]} on line {i} is not a valid configuration for a nexafs scan')
-            if not isinstance(acq.get('edge','c'),(tuple,list)):
-                if not str(acq.get('edge','c')).lower() in edge_names.keys():
+        elif acq["type"].lower() == "nexafs":
+            if acq["configuration"] not in config_list:
+                raise TypeError(
+                    f'{acq["configuration"]} on line {i} is not a valid configuration for a nexafs scan'
+                )
+            if not isinstance(acq.get("edge", "c"), (tuple, list)):
+                if not str(acq.get("edge", "c")).lower() in edge_names.keys():
                     raise ValueError(f'{acq["edge"]} on line {i} is not a valid edge for a nexafs scan')
         if "polarizations" in acq:
             if isinstance(acq["polarizations"], (int, float)):
@@ -140,12 +145,20 @@ def load_samplesxlsx(filename: str):
         if not isinstance(acq.get("group", 0), str):
             acq["group"] = str(acq.get("group", ""))
         acq["uid"] = str(uuid.uuid1())
-        samp["acquisitions"].append(acq)  # no checking for validity here?
-    for i, sam in enumerate(new_bar):
-        new_bar[i]["location"] = json.loads(sam.get("location", "[]").replace("'", '"'))
+        samp["acquisitions"].append(acq)
 
+    for i, sam in enumerate(new_bar):
+        if sam["location"] == "":
+            new_bar[i]["location"] = "[]"
+        new_bar[i]["location"] = json.loads(sam.get("location", "[]").replace("'", '"'))
+        if sam["bar_loc"] == "":
+            new_bar[i]["bar_loc"] = "{}"
         new_bar[i]["bar_loc"] = json.loads(sam.get("bar_loc", "{}").replace("'", '"'))
-        new_bar[i]["acq_history"] = json.loads(sam.get("acq_history", "[]").replace("'", '"').rstrip('\\"').lstrip('\\"'))
+        if sam["acq_history"] == "":
+            new_bar[i]["acq_history"] = "[]"
+        new_bar[i]["acq_history"] = json.loads(
+            sam.get("acq_history", "[]").replace("'", '"').rstrip('\\"').lstrip('\\"')
+        )
 
         if "proposal_id" in sam:
             proposal = sam["proposal_id"]
@@ -161,7 +174,7 @@ def load_samplesxlsx(filename: str):
         new_bar[i]["bar_loc"]["spot"] = sam["bar_spot"]
         new_bar[i]["bar_loc"]["th"] = sam["angle"]
         for key in [
-            key for key, value in sam.items() if "named" in key.lower() or 'Index' in key
+            key for key, value in sam.items() if "named" in key.lower() or "Index" in key
         ]:  # get rid of the stupid unnamed columns thrown in by pandas
             del new_bar[i][key]
     return new_bar
@@ -249,7 +262,7 @@ def get_proposal_info(proposal_id, beamline="SST1", path_base="/sst/", cycle="20
     return res["data_session"], valid_path, valid_SAF, proposal_info
 
 
-def save_samplesxlsx(bar, name='', path=''):
+def save_samplesxlsx(bar, name="", path=""):
     """Exports the in-memory bar (list of sample dicts) as an excel sheet with 'Bar', and 'Acquisitions' sheets.
         exports with a fixed pattern to path out_date_name.xlsx
     Parameters
@@ -271,16 +284,14 @@ def save_samplesxlsx(bar, name='', path=''):
         "z": "z",
         "th": "th",
     }
-    
 
     filename = path + f'out_{datetime.today().strftime("%Y-%m-%d_%H-%M-%S")}_{name}.xlsx'
-    
+
     for samp in bar:
         for acq in samp['acq_history']:
             for arg in acq['arguments']:
                 if isinstance(acq['arguments'][arg],np.ndarray):
                     acq['arguments'][arg] = list(acq['arguments'][arg])
-
 
 
     acqlist = []
@@ -289,7 +300,7 @@ def save_samplesxlsx(bar, name='', path=''):
             acq.update({"sample_id": sam["sample_id"]})
             cleanacq = deepcopy(empty_acq)
             for key in acq:
-                if isinstance(acq[key],(str)):
+                if isinstance(acq[key], (str)):
                     cleanacq[key] = acq[key]
                 else:
                     cleanacq[key] = json.dumps(acq[key])
@@ -301,7 +312,7 @@ def save_samplesxlsx(bar, name='', path=''):
     for i, sam in enumerate(testdict):
         if "acq_history" not in testdict[i].keys():
             testdict[i]["acq_history"] = []
-        elif isinstance(testdict[i]["acq_history"],str):
+        elif isinstance(testdict[i]["acq_history"], str):
             testdict[i]["acq_history"] = []
         # json dump the pythonic parts
         # including sample: bar_loc,location, proposal,acq_history
@@ -309,7 +320,7 @@ def save_samplesxlsx(bar, name='', path=''):
         testdict[i]["bar_loc"] = json.dumps(testdict[i]["bar_loc"])
         testdict[i]["location"] = json.dumps(testdict[i]["location"])
         testdict[i]["proposal"] = json.dumps(testdict[i]["proposal"])
-        del testdict[i]['acquisitions']
+        del testdict[i]["acquisitions"]
         cleansam = deepcopy(empty_sample)
         cleansam.update(testdict[i])
         cleanbar.append(cleansam)
@@ -320,10 +331,10 @@ def save_samplesxlsx(bar, name='', path=''):
     sampledf.to_excel(writer, index=False, sheet_name="Bar")
     acqdf.to_excel(writer, index=False, sheet_name="Acquisitions")
     writer.close()
-    
+
     excel_file = load_workbook(filename)
     excel_file.properties.title = current_version
-    excel.save_workbook(excel_file,filename)
+    excel.save_workbook(excel_file, filename)
     excel_file.close()
 
 
@@ -338,7 +349,6 @@ def convertSampleSheetExcelMediaWiki(
     endColumn_Params: str = "F",
     verbose: bool = "TRUE",
 ) -> str:
-
     """Converts Sample Sheet Parameter Metadata into a MediaWiki-compatible formatted string.
 
     Parameters
