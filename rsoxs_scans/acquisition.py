@@ -107,7 +107,9 @@ def dryrun_acquisition(acq, sample):
 
 
 ### TODO sort_by docstring explanation is confusing
-def dryrun_bar(bar, sort_by=["apriority"], rev=[False], print_dry_run=True, group="all", repeat_previous_runs=False):
+def dryrun_bar(
+    bar, sort_by=["apriority"], rev=[False], print_dry_run=True, group="all", repeat_previous_runs=False
+):
     """Generate output queue entries for all sample dicts in the bar list
 
     Parameters
@@ -133,10 +135,10 @@ def dryrun_bar(bar, sort_by=["apriority"], rev=[False], print_dry_run=True, grou
     config_change_time = 120  # time to change between configurations, in seconds.
     list_out = []
 
-    if isinstance(group,str):
+    if isinstance(group, str):
         group = [group]
-    if not isinstance(group,list):
-        group = ['all']
+    if not isinstance(group, list):
+        group = ["all"]
     for group_num, gr in enumerate(group):
         # Loop through sample dicts in the bar
         for samp_num, s in enumerate(bar):
@@ -145,7 +147,6 @@ def dryrun_bar(bar, sort_by=["apriority"], rev=[False], print_dry_run=True, grou
             sample_project = s["project_name"]
             # Loop through acquisitions within the sample
             for acq_num, a in enumerate(s["acquisitions"]):
-
                 # Skip this acquisition unless any of these conditions are true
                 if not (
                     str(gr).lower() == "all"  # true if user specified all to be evaluated
@@ -156,7 +157,7 @@ def dryrun_bar(bar, sort_by=["apriority"], rev=[False], print_dry_run=True, grou
                     continue
 
                 # skip the acquisition if it has a run already in the list (and we're not repeating everything)
-                if len(a.get('runs',[])) and not repeat_previous_runs:
+                if len(a.get("runs", [])) and not repeat_previous_runs:
                     continue
 
                 if "uid" not in a.keys():
@@ -203,8 +204,8 @@ def dryrun_bar(bar, sort_by=["apriority"], rev=[False], print_dry_run=True, grou
         "spriority": 12,
         "apriority": 13,
         "sample_num": 7,
-        "group":18,
-        "group_name":15
+        "group": 18,
+        "group_name": 15,
     }
     # add anything to the above list, and make a key in the above dictionary,
     # using that element to sort by something else
@@ -243,40 +244,45 @@ def dryrun_bar(bar, sort_by=["apriority"], rev=[False], print_dry_run=True, grou
 
     # Loop through sorted acquisition steps and build output acquisition queue and dryrun text message
     for i, step in enumerate(list_out):
-        acquisition = {'acq_index':i,'steps':[]}
+        acquisition = {"acq_index": i, "steps": []}
         warnings.resetwarnings()
-        text += f"________________________________________________\nAcquisition # {i} from sample {step[5]['sample_name']}, group {step[15]}\n\n"
-        text += "Summary: load {} from {}, config {}, run {} priority( sample {} acquisition {}), starts @ {} takes {}\n".format(
-            step[5]["sample_name"],
-            step[1],
-            step[2],
-            step[3],
-            step[12],
-            step[13],
-            time_sec(total_time),
-            time_sec(step[4]),
+        text += "_" * 67  # Print header bar
+
+        text += (  # Append Acquisition/Sample Biographical Info
+            f"\nAcquisition # {i} from Group: {step[15]}"
+            f"\n\tSample Name: {step[5]['sample_name']}"
+            f"\n\tSample id: {step[5]['sample_id']}"
+            f"\n\tProject: {step[1]}\n\n"
         )
 
-        # Check for config change
+        text += (  # Append brief run summary
+            f"Summary: load {step[5]['sample_id']} with config {step[2]}, "
+            f"run {step[3]} with priority(Sample: {step[12]}, Acquisition: {step[13]})"
+            f"\n\tStarts @ {time_sec(total_time)} takes {time_sec(step[4])}"
+        )
+
+        # Append config change time, if needed
         if step[2] != previous_config:
             total_time += config_change_time
             text += f" (+{config_change_time} seconds for configuration change)\n"
         text += "\n"
 
-        # Check if acquisition will take too long
+        # Check if acquisition will take longer than the default warning time
         if step[4] > default_warning_step_time:
             warnings.warn(
-                f"WARNING: acquisition # {i} will take {step[4]/60} minutes, which is more than {default_warning_step_time/60} minutes"
+                f"\nWARNING: Acquisition # {i}, sample_id: {step[5]['sample_id']} will take {step[4]/60} minutes, which is more than {default_warning_step_time/60} minutes"
             )
 
         # Check if configuration is invalid
         if step[2] not in config_list:
             warnings.warn(
-                f"WARNING: acquisition # {i} has an invalid configuration - no configuration will be loaded"
+                f"\nWARNING: Acquisition #{i}, sample_id: {step[5]['sample_id']} has an invalid configuration - no configuration will be loaded"
             )
             text += "Warning invalid configuration" + step[2]
-        try:
-            acquisition['steps'] = dryrun_acquisition(step[6], step[5])
+        
+        #dryrun acquisition and output steps
+        try: 
+            acquisition["steps"] = dryrun_acquisition(step[6], step[5])
             acquisition["acq_index"] = i
             acquisition["acq_time"] = step[4]
             acquisition["total_acq"] = len(list_out)
@@ -286,39 +292,50 @@ def dryrun_bar(bar, sort_by=["apriority"], rev=[False], print_dry_run=True, grou
             acquisition["group"] = step[15]
             acquisition["slack_message_start"] = step[16]
             acquisition["slack_message_end"] = step[17]
+            
             # if this step has a single output entry, we are done with this entry
-            if not isinstance(acquisition['steps'], list):
-                acquisition['steps'] = [acquisition['steps']]
+            if not isinstance(acquisition["steps"], list):
+                acquisition["steps"] = [acquisition["steps"]]
+            
+            # Generate the display text for each step
             statements = []
-            for j, out in enumerate(acquisition['steps']):
+            for j, out in enumerate(acquisition["steps"]):
                 out["queue_step"] = j
                 out["acq_index"] = i
-                statements.append(f'>Step {j}: {out["description"].lstrip()}')
+                statements.append(f'> Step {j}: {out["description"].lstrip()}')
 
                 if (out["action"]) == "error":
-                    warnings.warn(f"WARNING: acquisition # {i} has a step with an error: \n{out['description']}")
+                    warnings.warn(f"WARNING: Acquisition #{i}, sample_id: {step[5]['sample_id']} has a step with an error: \n{out['description']}")
                     acqs_with_errors.append((i, out["description"]))
-                    
+
             text += "".join(statements)
 
             acq_queue.append(acquisition)
         except Exception as e:
-            warnings.warn(f"WARNING: acquisition # {i} has a step with an error: {str(e)}")
+            warnings.warn(f"WARNING: Acquisition #{i}, sample_id: {step[5]['sample_id']} has a step with an error: {str(e)}")
+            # raise e
             pass
+        # Add this acquisitions time to the running total
         total_time += step[4]
-        text += "\n________________________________________________\n"
+        
+        text += "_" * 67 + "\n" # Print Footer bar
+        # Keep track of the previous config, for calc. config change time.
         previous_config = step[2]
+    
+    # Store total_time estimate in each acquisition
     for acq in acq_queue:
         acq["total_queue_time"] = total_time
         acq["time_after"] = total_time - acq["time_before"] - acq["acq_time"]
 
     text += f"\n\nTotal estimated time including config changes {time_sec(total_time)}"
+    
     if print_dry_run:
         print(text)
+    
     # Warn user about acquisitions that contained errors
     for index, error in acqs_with_errors:
         warnings.resetwarnings()
-        warnings.warn(f"WARNING: acquisition # {index} has a step with an error\n{error}\n\n")
+        warnings.warn(f"WARNING: acquisition #{index} has a step with an error\n{error}\n\n")
     return acq_queue
 
 
@@ -346,8 +363,8 @@ def get_acq_details(acqIndex, outputs, printOutput=True):
     list of dict
         list containing a dict for each 'queue step' [set of commands within an acquisition]
     """
-    #outList = list(filter(lambda outputs: outputs["acq_index"] == acqIndex, outputs))
-    outList = [output['steps'] for output in outputs if output["acq_index"] == acqIndex]
+    # outList = list(filter(lambda outputs: outputs["acq_index"] == acqIndex, outputs))
+    outList = [output["steps"] for output in outputs if output["acq_index"] == acqIndex]
     if len(outList) == 1:
         outList = outList[0]
     elif len(outList) > 1:
@@ -357,7 +374,7 @@ def get_acq_details(acqIndex, outputs, printOutput=True):
             print("-" * 50)
             print(f">Step: {step['queue_step']}")
             print("-" * 50)
-            print(json.dumps(step, indent=4,cls=NumpyEncoder))
+            print(json.dumps(step, indent=4, cls=NumpyEncoder))
 
     return
 
@@ -440,7 +457,7 @@ def time_sec(seconds):
     str
         timestamp formatted as hh:mm:ss
     """
-    if isinstance(seconds,datetime.timedelta):
+    if isinstance(seconds, datetime.timedelta):
         seconds = seconds.total_seconds()
     dt = datetime.timedelta(seconds=seconds)
     return str(dt).split(".")[0]
